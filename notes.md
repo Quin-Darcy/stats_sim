@@ -1,0 +1,12 @@
+- There are two scenarios to note:
+    - High discordance rate with clear one side majority:
+        - discordance difference in, say, candidate's favor is very large
+        - the magnitude of difference means evidence is strong that candidate is better than incumbent
+        - but high discordant rate means larger MDE
+    - Low discordance rate with clear one side majority:
+        - small magnitude in difference means evidence one is better than the other is weaker
+        - but low discordance rate means smaller MDE
+    - these are in conflict and why we can't treat the discordance rate as a lever in our objective
+    - instead the discordance rate is just a property of the instrument we are stuck with
+    - the mde is a diagnostic which provides information (is n big enough to resolve effects we care about)
+    - its minimization is not an objective in itself
