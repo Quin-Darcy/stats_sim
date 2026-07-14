@@ -2,7 +2,7 @@
 // provided answer against the actual answer to 
 // a question. There are three possible outcomes
 // to this checking.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Valuation {
     CORRECT,
     PARTIAL,
