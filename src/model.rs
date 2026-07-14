@@ -1,8 +1,8 @@
-use rand::thread_rng;
+use rand::Rng;
 use rand::distributions::Distribution;
 use statrs::distribution::{Dirichlet, Categorical};
 
-use crate::score::{Valuation, ScoringPolicy};
+use crate::score::Valuation;
 
 
 #[derive(Debug)]
@@ -39,7 +39,8 @@ impl Battery {
     pub fn new(
         battery_mean: [f64; 3],
         concentration: f64,
-        num_questions: usize
+        num_questions: usize,
+        rng: &mut impl Rng
     ) -> Option<Battery> {
         // A Battery is defined by the questions it contains. In this model,
         // there are no actual questions but Categoricals which describe the
@@ -86,16 +87,13 @@ impl Battery {
         let alpha3: f64 = concentration * battery_mean[2];
         let alpha: Vec<f64> = Vec::from([alpha1, alpha2, alpha3]);
 
-        // An Rng is needed 
-        let mut rng = thread_rng();
-
         // Create the Dirichlet distribution object
         let dir_dist = Dirichlet::new(alpha).unwrap();
 
         let mut questions: Vec<[f64; 3]> = Vec::with_capacity(num_questions);
         let mut norm_sum;
         for _ in 0..num_questions {
-            let v = dir_dist.sample(&mut rng);
+            let v = dir_dist.sample(rng);
             norm_sum = v[0] + v[1] + v[2];
             questions.push([v[0] / norm_sum, v[1] / norm_sum, v[2] / norm_sum]);
         }
@@ -163,58 +161,34 @@ impl Config {
     }
 }
 
-#[derive(Debug)]
-pub struct BatteryEval {
-    // A BatteryEval represents the outcome of each answer to 
-    // a set of questions in a Battery under the effect of a 
-    // specific Config.
-    // 
-    // A BatteryEval is the end result of applying a config to a specific
-    // Battery and evaluating each answer, determining if they were
-    // CORRECT, INCORRECT, or PARTIAL.
-    //
-    // Concretely, since a Battery's questions are just distributions, 
-    // the BatteryEval is what you get by first reshaping the distributions
-    // with the Config's effect, and then sampling from each distribution.
-    pub valuations: Vec<Valuation>,
-    pub scores: Vec<f64>
-}
+pub fn eval_battery(
+    battery: &Battery, 
+    config: &Config,
+    rng: &mut impl Rng
+) -> Vec<Valuation> {
+    let num_answers: usize = battery.questions.len();
+    let mut valuations: Vec<Valuation> = Vec::with_capacity(num_answers);
 
-impl BatteryEval {
-    pub fn new(
-        battery: &Battery,
-        config: &Config,
-        policy: &ScoringPolicy,
-    ) -> Self {
-        let num_answers: usize = battery.questions.len();
-        let mut valuations: Vec<Valuation> = Vec::with_capacity(num_answers);
-        let mut scores: Vec<f64> = Vec::with_capacity(num_answers);
+    let mut val_vec: [f64; 3];
+    for i in 0..num_answers {
+        val_vec = config.apply(
+            &battery.questions[i]
+        );
 
-        let mut val_vec: [f64; 3];
-        let mut rng = thread_rng();
-        for i in 0..num_answers {
-            val_vec = config.apply(
-                &battery.questions[i]
-            );
+        let answer: f64 = Categorical::new(&val_vec).unwrap().sample(rng);
 
-            let answer: f64 = Categorical::new(&val_vec).unwrap().sample(&mut rng);
-
-            match answer {
-                0.0 => {
-                    valuations.push(Valuation::CORRECT);
-                    scores.push(policy.score(&Valuation::CORRECT));
-                },
-                1.0 => {
-                    valuations.push(Valuation::PARTIAL);
-                    scores.push(policy.score(&Valuation::PARTIAL));
-                },
-                2.0 => {
-                    valuations.push(Valuation::INCORRECT);
-                    scores.push(policy.score(&Valuation::INCORRECT));
-                },
-                _ => todo!()
-            };
-        }
-        BatteryEval { valuations, scores }
+        match answer {
+            0.0 => {
+                valuations.push(Valuation::CORRECT);
+            },
+            1.0 => {
+                valuations.push(Valuation::PARTIAL);
+            },
+            2.0 => {
+                valuations.push(Valuation::INCORRECT);
+            },
+            _ => todo!()
+        };
     }
+    valuations
 }

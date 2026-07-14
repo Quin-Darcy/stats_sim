@@ -1,18 +1,7 @@
-use crate::model::{Battery, BatteryEval, Config};
+use rand::Rng;
+use crate::model::{Battery, Config, eval_battery};
 use crate::score::{Valuation, ScoringPolicy};
 
-#[derive(Debug)]
-pub struct Observation {
-    // An observation is the type associated with 
-    // the components of the sample. For a given Battery,
-    // there is one observation for each of it's questions.
-    //
-    // The observation consists of the answer (Valuation) 
-    // given by both configs along with the difference of
-    // their respective scores
-    result: (Valuation, Valuation),
-    score: f64
-}
 
 #[derive(Debug)]
 pub struct Sample {
@@ -20,7 +9,7 @@ pub struct Sample {
     // fixed battery under the effect of two different
     // configs.
     size: usize,
-    observations: Vec<Observation>,
+    observations: Vec<(Valuation, Valuation)>,
 }
 
 impl Sample {
@@ -28,25 +17,31 @@ impl Sample {
         battery: &Battery,
         config1: &Config,
         config2: &Config,
-        policy: &ScoringPolicy
+        rng: &mut impl Rng
     ) -> Sample {
         let size: usize = battery.questions.len();
-        let eval1 = BatteryEval::new(battery, config1, policy);
-        let eval2 = BatteryEval::new(battery, config2, policy);
-
-        let mut observations: Vec<Observation> = Vec::with_capacity(size);
-        for i in 0..size {
-            observations.push(
-                Observation {
-                    result: (
-                        eval1.valuations[i].clone(), 
-                        eval2.valuations[i].clone()
-                    ),
-                    score: eval1.scores[i] - eval2.scores[i]
-                }
-            );
-        }
+        let eval1: Vec<Valuation> = eval_battery(battery, config1, rng);
+        let eval2: Vec<Valuation> = eval_battery(battery, config2, rng);
+        let observations: Vec<(Valuation, Valuation)> = std::iter::zip(
+            eval1,
+            eval2
+        ).collect();
 
         Sample{ size, observations }
+    }
+
+    pub fn get_differences(&self, policy: &ScoringPolicy) -> Vec<f64> {
+        let mut diffs: Vec<f64> = Vec::with_capacity(self.size);
+        for i in 0..self.size {
+            diffs.push(
+                policy.score(&self.observations[i].0) - policy.score(&self.observations[i].1)
+            );
+        }
+        diffs
+    }
+    
+    pub fn get_mean(&self, policy: &ScoringPolicy) -> f64 {
+        let diffs: Vec<f64> = self.get_differences(policy);
+        diffs.iter().sum::<f64>() / (self.size as f64)
     }
 }

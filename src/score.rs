@@ -9,6 +9,7 @@ pub enum Valuation {
     INCORRECT
 }
 
+#[derive(Debug)]
 pub struct ScoringPolicy {
     // This parameter represents how much we reward an abstention
     // If the AI answers "I don't know", then how much to we value
