@@ -17,6 +17,8 @@ pub fn sd(vals: &[f64]) -> f64 {
 
 
 pub fn ci(vals: &mut [f64], gamma: f64) -> [f64; 2] {
+    // sort vals
+    vals.sort_by(|a, b| a.total_cmp(b));
     let l: f64 = (1.0 - gamma) / 2.0;
     let u: f64 = 1.0 - l;
     let li: usize = (l * vals.len() as f64) as usize;

@@ -32,15 +32,13 @@ pub struct Battery {
     // will be answered incorrectly. This is the "baseline" difficulty
     // *before* a config is introduced which may shift these distributions
     // in some way.
-    pub questions: Vec<[f64; 3]>
+    pub alpha: [f64; 3],
 }
 
 impl Battery {
     pub fn new(
         battery_mean: [f64; 3],
         concentration: f64,
-        num_questions: usize,
-        rng: &mut impl Rng
     ) -> Option<Battery> {
         // A Battery is defined by the questions it contains. In this model,
         // there are no actual questions but Categoricals which describe the
@@ -85,20 +83,109 @@ impl Battery {
         let alpha1: f64 = concentration * battery_mean[0];
         let alpha2: f64 = concentration * battery_mean[1];
         let alpha3: f64 = concentration * battery_mean[2];
-        let alpha: Vec<f64> = Vec::from([alpha1, alpha2, alpha3]);
+        let alpha: [f64; 3] = [alpha1, alpha2, alpha3];
 
-        // Create the Dirichlet distribution object
-        let dir_dist = Dirichlet::new(alpha).unwrap();
+        Some(Battery { alpha })
+    }
 
-        let mut questions: Vec<[f64; 3]> = Vec::with_capacity(num_questions);
-        let mut norm_sum;
+    pub fn get_valuation_pairs(
+        &self, 
+        num_questions: usize, 
+        configs: (&Config, &Config),
+        rng: &mut impl Rng,
+    ) -> Vec<(Valuation, Valuation)> {
+        let dir_dist = Dirichlet::new(Vec::from(self.alpha)).unwrap();
+        let mut base_question: [f64; 3];
+        let mut norm_sum: f64;
+
+        // Pre-declare muts to store effected questions and valuations
+        let mut question_after_config1: [f64; 3];
+        let mut valuation1: Valuation;
+        let mut question_after_config2: [f64; 3];
+        let mut valuation2: Valuation;
+
+        let mut valuation_pairs: Vec<(Valuation, Valuation)> = Vec::with_capacity(num_questions);
+
         for _ in 0..num_questions {
+            // Create the question which will be processed by each config
             let v = dir_dist.sample(rng);
             norm_sum = v[0] + v[1] + v[2];
-            questions.push([v[0] / norm_sum, v[1] / norm_sum, v[2] / norm_sum]);
+            base_question = [v[0] / norm_sum, v[1] / norm_sum, v[2] / norm_sum];
+
+            // Perturb the question by the configs
+            question_after_config1 = configs.0.apply(&base_question);
+            question_after_config2 = configs.1.apply(&base_question);
+
+            // Sample verdict for each question
+            let categoricals: (f64, f64) = (
+                Categorical::new(
+                    &question_after_config1
+                ).unwrap().sample(rng),
+                Categorical::new(
+                    &question_after_config2
+                ).unwrap().sample(rng)
+            );
+
+            match categoricals {
+                (0.0, 0.0) => {
+                    valuation_pairs.push((
+                        Valuation::CORRECT,
+                        Valuation::CORRECT
+                    ));
+                },
+                (0.0, 1.0) => {
+                    valuation_pairs.push((
+                        Valuation::CORRECT,
+                        Valuation::PARTIAL
+                    ));                    
+                },
+                (0.0, 2.0) => {
+                    valuation_pairs.push((
+                        Valuation::CORRECT,
+                        Valuation::INCORRECT
+                    ));                    
+                },
+                (1.0, 0.0) => {
+                    valuation_pairs.push((
+                        Valuation::PARTIAL,
+                        Valuation::CORRECT
+                    ));                    
+                },
+                (1.0, 1.0) => {
+                    valuation_pairs.push((
+                        Valuation::PARTIAL,
+                        Valuation::PARTIAL
+                    ));
+                },
+                (1.0, 2.0) => {
+                    valuation_pairs.push((
+                        Valuation::PARTIAL,
+                        Valuation::INCORRECT
+                    ));
+                },
+                (2.0, 0.0) => {
+                    valuation_pairs.push((
+                        Valuation::INCORRECT,
+                        Valuation::CORRECT
+                    ));
+                },
+                (2.0, 1.0) => {
+                    valuation_pairs.push((
+                        Valuation::INCORRECT,
+                        Valuation::PARTIAL
+                    ));
+                },
+                (2.0, 2.0) => {
+                    valuation_pairs.push((
+                        Valuation::INCORRECT,
+                        Valuation::INCORRECT
+                    ));
+                }
+                _ => todo!()
+            }
+
         }
-        
-        Some(Battery { questions })
+        valuation_pairs
     }
 }
 
@@ -159,36 +246,4 @@ impl Config {
 
         new_vec
     }
-}
-
-pub fn eval_battery(
-    battery: &Battery, 
-    config: &Config,
-    rng: &mut impl Rng
-) -> Vec<Valuation> {
-    let num_answers: usize = battery.questions.len();
-    let mut valuations: Vec<Valuation> = Vec::with_capacity(num_answers);
-
-    let mut val_vec: [f64; 3];
-    for i in 0..num_answers {
-        val_vec = config.apply(
-            &battery.questions[i]
-        );
-
-        let answer: f64 = Categorical::new(&val_vec).unwrap().sample(rng);
-
-        match answer {
-            0.0 => {
-                valuations.push(Valuation::CORRECT);
-            },
-            1.0 => {
-                valuations.push(Valuation::PARTIAL);
-            },
-            2.0 => {
-                valuations.push(Valuation::INCORRECT);
-            },
-            _ => todo!()
-        };
-    }
-    valuations
 }

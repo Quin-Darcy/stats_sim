@@ -44,8 +44,6 @@ impl Bootstrap {
             );
             means.push(temp_sample.get_mean(policy));
         }
-        // sort it for downstream CI calcs
-        means.sort_by(|a, b| a.total_cmp(b));
         means
     }
 
@@ -60,8 +58,6 @@ impl Bootstrap {
             );
             ratios.push(temp_sample.get_agreement_ratio());
         }
-        // sort it for downstream CIs
-        ratios.sort_by(|a, b| a.total_cmp(b));
         ratios
     }
 }
