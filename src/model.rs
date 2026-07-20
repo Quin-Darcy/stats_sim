@@ -2,11 +2,19 @@ use rand::Rng;
 use rand::distributions::Distribution;
 use statrs::distribution::{Dirichlet, Categorical};
 
-use crate::score::Valuation;
+use crate::score::{Valuation, get_valuation};
 
 
 #[derive(Debug)]
 pub struct Battery {
+    // A Battery is identified by the questions it contains. However,
+    // we don't actually model the questions themselves, but the valuation
+    // of the question (i.e., correct, incorrect, etc).
+    //
+    // A Battery is only used in service of comparing two configs, and the
+    // comparison only cares about which config got which questions right
+    // or wrong.
+    //
     // for a given set of questions, we let each question have an 
     // intrinsic "difficulty" which is described by the Categorical
     // distribution over the Valuation space {CORRECT, PARTIAL, INCORRECT}
@@ -21,10 +29,9 @@ pub struct Battery {
     // Instead of actual questions, we use the probability vector that
     // defines the categorical as a stand-in for the question itself.
     //
-    // A Battery consists of a vector of these probability vectors.
-    //
-    // Sampling from the distribution defined by one of these probability 
-    // vectors gives you one Valuation back.
+    // A Battery consists of the parameters that define the Dirichlet
+    // distribution from which the probability vectors that represent the 
+    // questions are sampled from..
     //
     // We would say "most of the questions are difficult" when the categorical 
     // distribution for each question has high probability for the 
@@ -100,10 +107,7 @@ impl Battery {
 
         // Pre-declare muts to store effected questions and valuations
         let mut question_after_config1: [f64; 3];
-        let mut valuation1: Valuation;
         let mut question_after_config2: [f64; 3];
-        let mut valuation2: Valuation;
-
         let mut valuation_pairs: Vec<(Valuation, Valuation)> = Vec::with_capacity(num_questions);
 
         for _ in 0..num_questions {
@@ -126,64 +130,10 @@ impl Battery {
                 ).unwrap().sample(rng)
             );
 
-            match categoricals {
-                (0.0, 0.0) => {
-                    valuation_pairs.push((
-                        Valuation::CORRECT,
-                        Valuation::CORRECT
-                    ));
-                },
-                (0.0, 1.0) => {
-                    valuation_pairs.push((
-                        Valuation::CORRECT,
-                        Valuation::PARTIAL
-                    ));                    
-                },
-                (0.0, 2.0) => {
-                    valuation_pairs.push((
-                        Valuation::CORRECT,
-                        Valuation::INCORRECT
-                    ));                    
-                },
-                (1.0, 0.0) => {
-                    valuation_pairs.push((
-                        Valuation::PARTIAL,
-                        Valuation::CORRECT
-                    ));                    
-                },
-                (1.0, 1.0) => {
-                    valuation_pairs.push((
-                        Valuation::PARTIAL,
-                        Valuation::PARTIAL
-                    ));
-                },
-                (1.0, 2.0) => {
-                    valuation_pairs.push((
-                        Valuation::PARTIAL,
-                        Valuation::INCORRECT
-                    ));
-                },
-                (2.0, 0.0) => {
-                    valuation_pairs.push((
-                        Valuation::INCORRECT,
-                        Valuation::CORRECT
-                    ));
-                },
-                (2.0, 1.0) => {
-                    valuation_pairs.push((
-                        Valuation::INCORRECT,
-                        Valuation::PARTIAL
-                    ));
-                },
-                (2.0, 2.0) => {
-                    valuation_pairs.push((
-                        Valuation::INCORRECT,
-                        Valuation::INCORRECT
-                    ));
-                }
-                _ => todo!()
-            }
-
+            valuation_pairs.push((
+                get_valuation(categoricals.0),
+                get_valuation(categoricals.1)
+            ));
         }
         valuation_pairs
     }

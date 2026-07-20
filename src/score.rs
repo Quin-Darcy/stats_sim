@@ -9,6 +9,19 @@ pub enum Valuation {
     INCORRECT
 }
 
+pub fn get_valuation(num: f64) -> Valuation {
+    let epsilon: f64 = 0.001;
+    if (num - 0.0).abs() < epsilon {
+        return Valuation::CORRECT;
+    }
+
+    if (num - 1.0).abs() < epsilon {
+        return Valuation::PARTIAL;
+    }
+
+    return Valuation::INCORRECT;
+}
+
 #[derive(Debug)]
 pub struct ScoringPolicy {
     // This parameter represents how much we reward an abstention
