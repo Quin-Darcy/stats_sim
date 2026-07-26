@@ -92,24 +92,30 @@ impl Battery {
         let alpha3: f64 = concentration * battery_mean[2];
         let alpha: [f64; 3] = [alpha1, alpha2, alpha3];
 
+        // The battery contains the parameters that define the distribution
+        // from which "questions" are sampled. It does not itself contain the questions
         Some(Battery { alpha })
     }
 
+    // Evaluate one battery through two configs and get back the paired valuations
     pub fn get_valuation_pairs(
         &self, 
         num_questions: usize, 
         configs: (&Config, &Config),
         rng: &mut impl Rng,
     ) -> Vec<(Valuation, Valuation)> {
+        // This is the distribution from which the batteries questions will be sampled
         let dir_dist = Dirichlet::new(Vec::from(self.alpha)).unwrap();
+
+        // "base question" is the original sample from the Dirichlet *before* config is applied
         let mut base_question: [f64; 3];
-        let mut norm_sum: f64;
 
         // Pre-declare muts to store effected questions and valuations
         let mut question_after_config1: [f64; 3];
         let mut question_after_config2: [f64; 3];
         let mut valuation_pairs: Vec<(Valuation, Valuation)> = Vec::with_capacity(num_questions);
 
+        let mut norm_sum: f64;
         for _ in 0..num_questions {
             // Create the question which will be processed by each config
             let v = dir_dist.sample(rng);
@@ -120,7 +126,9 @@ impl Battery {
             question_after_config1 = configs.0.apply(&base_question);
             question_after_config2 = configs.1.apply(&base_question);
 
-            // Sample verdict for each question
+            // Sample verdict for each question. Recall, a "question" is just a probability vector
+            // over the valuation (e.g., right, wrong, partial) space. Sampling from the
+            // distribution defined by the vector results in a question having been answered.
             let categoricals: (f64, f64) = (
                 Categorical::new(
                     &question_after_config1
@@ -130,6 +138,7 @@ impl Battery {
                 ).unwrap().sample(rng)
             );
 
+            // Each "answer" is either correct, incorrect, or partial
             valuation_pairs.push((
                 get_valuation(categoricals.0),
                 get_valuation(categoricals.1)

@@ -1,6 +1,6 @@
 use rand::Rng;
-use crate::model::{Battery, Config, eval_battery};
-use crate::score::{Valuation, ScoringPolicy};
+use crate::model::{Battery, Config};
+use crate::score::Valuation;
 
 
 #[derive(Debug)]
@@ -14,48 +14,19 @@ pub struct Sample {
 
 impl Sample {
     pub fn new(
+        size: usize,
         battery: &Battery,
         config1: &Config,
         config2: &Config,
         rng: &mut impl Rng
     ) -> Sample {
-        let size: usize = battery.questions.len();
-        let eval1: Vec<Valuation> = eval_battery(battery, config1, rng);
-        let eval2: Vec<Valuation> = eval_battery(battery, config2, rng);
-        let observations: Vec<(Valuation, Valuation)> = std::iter::zip(
-            eval1,
-            eval2
-        ).collect();
+        // Use the Battery's own method to get the valuation pairs
+        let observations: Vec<(Valuation, Valuation)> = battery.get_valuation_pairs(
+            size, 
+            (config1, config2), 
+            rng
+        );
 
         Sample{ size, observations }
-    }
-
-    pub fn from(size: usize, observations: Vec<(Valuation, Valuation)>) -> Sample {
-        Sample { size, observations }
-    }
-
-    pub fn get_differences(&self, policy: &ScoringPolicy) -> Vec<f64> {
-        let mut diffs: Vec<f64> = Vec::with_capacity(self.size);
-        for i in 0..self.size {
-            diffs.push(
-                policy.score(&self.observations[i].0) - policy.score(&self.observations[i].1)
-            );
-        }
-        diffs
-    }
-    
-    pub fn get_mean(&self, policy: &ScoringPolicy) -> f64 {
-        let diffs: Vec<f64> = self.get_differences(policy);
-        diffs.iter().sum::<f64>() / (self.size as f64)
-    }
-
-    pub fn get_agreement_ratio(&self) -> f64 {
-        let mut count = 0.0;
-        for i in 0..self.size {
-            if self.observations[i].0 == self.observations[i].1 {
-                count += 1.0;
-            }
-        }
-        count / (self.size as f64)
     }
 }
