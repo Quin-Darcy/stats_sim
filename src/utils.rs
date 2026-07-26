@@ -1,4 +1,5 @@
 use rand::Rng;
+use crate::score::{ScoringPolicy, Valuation};
 
 
 pub fn mean(vals: &[f64]) -> f64 {
@@ -17,7 +18,6 @@ pub fn variance(vals: &[f64]) -> f64 {
 pub fn sd(vals: &[f64]) -> f64 {
     variance(&vals).sqrt()
 }
-
 
 pub fn ci(vals: &mut [f64], gamma: f64) -> [f64; 2] {
     // sort vals
@@ -51,7 +51,6 @@ pub fn get_rand_pv(rng: &mut impl Rng) -> [f64; 3] {
         c = 1.0 - c1;
     }
 
-
     [a, b, c]
 }
 
@@ -63,3 +62,6 @@ pub fn get_rand_vec(rng: &mut impl Rng) -> [f64; 3] {
     ]
 }
 
+pub fn discord_diff(policy: &ScoringPolicy, v1: &Valuation, v2: &Valuation) -> f64 {
+    policy.score(v1) - policy.score(v2)
+}
