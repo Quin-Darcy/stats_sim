@@ -2,6 +2,7 @@ use rand::Rng;
 use rand::distributions::Distribution;
 use statrs::distribution::{Dirichlet, Categorical};
 
+use crate::utils;
 use crate::score::{Valuation, get_valuation};
 
 
@@ -97,6 +98,18 @@ impl Battery {
         Some(Battery { alpha })
     }
 
+    pub fn random(rng: &mut impl Rng) -> Self {
+        let concentration: f64 = rng.gen_range(0.0..2.0);
+        let battery_mean: [f64; 3] = utils::get_rand_pv(rng);
+
+        let alpha1: f64 = concentration * battery_mean[0];
+        let alpha2: f64 = concentration * battery_mean[1];
+        let alpha3: f64 = concentration * battery_mean[2];
+        let alpha: [f64; 3] = [alpha1, alpha2, alpha3];
+        
+        Battery { alpha }
+    }
+
     // Evaluate one battery through two configs and get back the paired valuations
     pub fn get_valuation_pairs(
         &self, 
@@ -188,6 +201,10 @@ impl Config {
         }
 
         Some(Config { effect })
+    }
+
+    pub fn random(rng: &mut impl Rng) -> Self {
+        Config { effect: utils::get_rand_vec(rng) }
     }
 
     pub fn apply(&self, vector: &[f64; 3]) -> [f64; 3] {

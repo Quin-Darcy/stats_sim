@@ -29,4 +29,18 @@ impl Sample {
 
         Sample{ size, observations }
     }
+
+    pub fn random(size: usize, rng: &mut impl Rng) -> Self {
+        let battery = Battery::random(rng);
+        let config1 = Config::random(rng);
+        let config2 = Config::random(rng);
+
+        let observations: Vec<(Valuation, Valuation)> = battery.get_valuation_pairs(
+            size,
+            (&config1, &config2),
+            rng
+        );
+
+        Sample { size, observations }
+    }
 }
