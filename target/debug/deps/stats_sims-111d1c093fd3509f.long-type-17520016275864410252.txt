@@ -1,0 +1,4 @@
+nalgebra::base::matrix::Matrix<T, R, C, <nalgebra::base::default_allocator::DefaultAllocator as nalgebra::base::allocator::Allocator<R, C>>::Buffer<T>>
+Sum<&'a nalgebra::base::matrix::Matrix<T, R, C, <nalgebra::base::default_allocator::DefaultAllocator as nalgebra::base::allocator::Allocator<R, C>>::Buffer<T>>>
+nalgebra::base::matrix::Matrix<T, nalgebra::base::dimension::Dyn, C, <nalgebra::base::default_allocator::DefaultAllocator as nalgebra::base::allocator::Allocator<nalgebra::base::dimension::Dyn, C>>::Buffer<T>>
+Sum<&'a nalgebra::base::matrix::Matrix<T, nalgebra::base::dimension::Dyn, C, <nalgebra::base::default_allocator::DefaultAllocator as nalgebra::base::allocator::Allocator<nalgebra::base::dimension::Dyn, C>>::Buffer<T>>>
