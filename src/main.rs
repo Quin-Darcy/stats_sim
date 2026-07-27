@@ -14,6 +14,27 @@ use crate::world::World;
 use crate::sample::Sample;
 
 
+// This function is only used to verify the implicit claim made by the CIs
+// we return from utils::ci().
+//
+// We generate some number of fresh samples (not the artifical ones created
+// during bootstrapping) which gives us the sample distribution of the average
+// discordant difference. This approximates the "real" mean discordant difference
+// with respect to the given Battery and Config pair. The average discordant 
+// difference of the sample distribution is then treated as our population parameter.
+//
+// We use each of these fresh samples (base_samples) as *the* base sample in one
+// bootstrap "simulation". Recall, given one real sample, we can use bootstrapping
+// to get a CI. The process from one base sample to a CI is one bootstrapping process.
+//
+// We perform the bootstrap process with each sample in base_samples, and for each 
+// resultant CI, we can ask "Does the CI contain the population parameter?". If it does,
+// we count it. The total number of CIs which contained the population parameter over
+// the total number of simulations is the "coverage". 
+//
+// It *should* approximately match what gamma is. That is, a gamma CI returned from
+// utils::ci() is a *promise* about the procedure and get_coverage() is the empircal
+// way to verify the promise.
 fn get_coverage(
     gamma: f64,
     num_resamples: usize,
@@ -42,7 +63,21 @@ fn get_coverage(
     coverage / (simulations as f64)
 }
 
-fn conservative_ci(
+// Very similar in structure to get_coverage() above, this function will
+// run a bootstrapping simulation for each Sample in base_samples. However,
+// instead of checking the returned CIs for the population parameter,
+// we capture the width of each CI.
+//
+// After all simulations are complete, we are left with a vector of f64s
+// each equaling the width of a CI returned during one of the simulations.
+//
+// We then order the widths from smallest to largest and then use alpha to
+// determine the width which (100 * alpha)% of all the other widths are *smaller*
+// than. So if alpha = 0.95, this function returns the CI width that 95% of
+// all the simulated widths were less than and so the returned width is a
+// quantifiably *conservative* estimate of the CI widths associated with the
+// parameters under simulation (e.g., sample size, Battery, Configs, gamma, etc)
+fn conservative_ci_width(
     alpha: f64,
     gamma: f64,
     num_resamples: usize,
