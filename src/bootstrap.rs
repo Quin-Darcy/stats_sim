@@ -19,7 +19,7 @@ use crate::utils;
 // discordant differences across all the sample-size many observations we randomly selected
 // (with replacement) from the base sample.
 //
-// Doing this num_resamples times gives us a vector of these averages, which (to the degree
+// Doing this num_replicates times gives us a vector of these averages, which (to the degree
 // the base sample is representative of the actual population - something influenced by sample
 // size) is an approximation of what we would get if we had performed this process on 
 // real fresh samples (the sample distribution) instead of these artificial ones, which itself
@@ -30,7 +30,7 @@ use crate::utils;
 // asked and evaluated throught the two Configs being compared. It represents the "true" comparison
 // of the Configs, no longer contigent on the questions we happened to select.
 pub fn run(
-    num_resamples: usize, 
+    num_replicates: usize, 
     base_sample: &Sample, 
     policy: &ScoringPolicy, 
     rng: &mut impl Rng
@@ -39,9 +39,9 @@ pub fn run(
     let mut ca: f64 = 0.0;
     let mut diff: f64;
     let sample_size: usize = base_sample.size;
-    let mut bootstrap_means: Vec<f64> = Vec::with_capacity(num_resamples);
+    let mut bootstrap_means: Vec<f64> = Vec::with_capacity(num_replicates);
 
-    for _ in 0..num_resamples {
+    for _ in 0..num_replicates {
         for j in 0..sample_size {
             index = rng.gen_range(0..sample_size);
             diff = utils::discord_diff(
@@ -58,24 +58,24 @@ pub fn run(
 
 // This function uses the ci utility to create a confidence interval by running the bootstrap
 // procedure and using the vector of returned re-sample means to then create the interval which
-// contains (100 * gamma)% of the mass. 
+// contains (100 * confidence_level)% of the mass. 
 //
 // It is important to keep in mind that for any CI, it is a statement about the procedure
 // which generated it. A 95% CI is only saying that if you repeated the procedure which generated
 // the CI 100 times, then on average, 95 of those intervals will contain the population parameter
 pub fn ci(
-    gamma: f64,
-    num_resamples: usize,
+    confidence_level: f64,
+    num_replicates: usize,
     base_sample: &Sample,
     policy: &ScoringPolicy,
     rng: &mut impl Rng
 ) -> [f64; 2] {
     let mut bootstrap_means: Vec<f64> = run(
-        num_resamples,
+        num_replicates,
         base_sample,
         policy,
         rng
     );
 
-    utils::ci(&mut bootstrap_means, gamma)
+    utils::ci(&mut bootstrap_means, confidence_level)
 }
