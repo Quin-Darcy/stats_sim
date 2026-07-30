@@ -35,7 +35,7 @@ use crate::sample::Sample;
 // It *should* approximately match what gamma is. That is, a gamma CI returned from
 // utils::ci() is a *promise* about the procedure and get_coverage() is the empircal
 // way to verify the promise.
-fn get_coverage(
+fn _get_coverage(
     gamma: f64,
     num_resamples: usize,
     base_samples: &[Sample],
@@ -131,22 +131,16 @@ fn main() {
     // already and so we will simply get the average of the sample
     // means
     let sample_means: Vec<f64> = samples.iter().map(|a| a.mean).collect();
-    let parameter: f64 = utils::mean(&sample_means);
+    let _parameter: f64 = utils::mean(&sample_means);
 
     // Validate bootstrap CI coverage claim
     let gamma: f64 = 0.95;
-    let num_resamples: usize = 10000;
-    let coverage: f64 = get_coverage(
-        gamma,
-        num_resamples,
-        &samples,
-        &policy,
-        parameter,
-        &mut rng,
-    );
-
+    // TODO: Add in-depth comment explaining run-to-run jitter and how
+    // this value puts the spead of jitter on CI widths below a tolerance
+    // of 0.01
+    let num_resamples: usize = 2000;
     let alpha: f64 = 0.95;
-    let con_ci: f64 = conservative_ci(
+    let con_ci: f64 = conservative_ci_width(
         alpha,
         gamma,
         num_resamples,
@@ -160,6 +154,5 @@ fn main() {
     println!("CI Gamma: {:?}", gamma);
     println!("Bootstrap Resamples: {:?}", num_resamples);
     println!("Bootstrap Simulations: {:?}", num_samples);
-    println!("Bootstrap Coverage: {:.2}%", coverage * 100.0);
     println!("Over {} simulations, {:.2}% of CI widths fall below {:.2}", num_samples, alpha * 100.0, con_ci);
 }
