@@ -2,6 +2,15 @@ use rand::Rng;
 use crate::score::{ScoringPolicy, Valuation};
 
 
+pub fn gcd(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        let temp = b;
+        b = a % b;
+        a = temp;
+    }
+    a
+}
+
 pub fn mean(vals: &[f64]) -> f64 {
     vals.iter().sum::<f64>() / (vals.len() as f64)
 }

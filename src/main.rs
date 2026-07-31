@@ -170,9 +170,10 @@ fn main() {
     let seed: u64 = 48;
     let mut rng = StdRng::seed_from_u64(seed);
 
-    // Set the policy we use to scrore
-    let circumspection: f64 = 0.5;
-    let policy = ScoringPolicy::new(circumspection).unwrap();
+    // Set the policy we use to scrore. Circumspection will equal p / q
+    let p: u64 = 1;
+    let q: u64 = 2;
+    let policy = ScoringPolicy::new(p, q).unwrap();
 
     // Create a world from which we will sample
     let world = World::random(&mut rng);
@@ -232,7 +233,7 @@ fn main() {
     // So the question becomes how much jitter are we willing to
     // tolerate, or what is the biggest step size between the samples
     // in the bootstrapped distribution. That value is the tolerance
-    let tolerance: f64 = 0.001;
+    let desired_tolerance: f64 = 0.001;
 
     // For a given tolerance level, there is a particular number
     // of replicates we must generate per call tobootstrap::run() in
@@ -258,6 +259,33 @@ fn main() {
     // number of replicates which satisfies this threshold since for each
     // additional replicate we generate is an additional impact on performance.
     let safety_threshold: usize = 20;
+
+    // For any single observation from a sample, its score is equal to the
+    // difference between the two Valuations. This means that the difference
+    // must be in the set {1, 1-a, a, 0, -a, a-1, -1}, where a is what the
+    // ScoringPolicy's "circumspection" term is. By construction, a = p/q,
+    // where p/q are share no common factors. With this, we can see the set
+    // of possible differences has GCD of 1/q. 
+    //
+    // The sample statistic we measure for each bootstrap run is the mean of
+    // all the discordant differences over an entire sample. That is, we compute
+    // the score for each Valuation pair in the replicate, sum them, and divide
+    // by the sample size. For each replicate, we compute that mean and the set
+    // of all the means is what bootstrap::run() returns.
+    //
+    // The mean discordant difference across a replicate is therefore some
+    // multiple of 1/(sample_size * q). Thus, the vector returned from
+    // bootstrap::run() can be thought of as containing elements from the lattice
+    // with step size 1 / (sample_size * q). It then follows that the smallest non-zero
+    // difference between any two of these values is equal to that step size.
+    //
+    // Therefore, the desired_tolerance can be no smaller than this step size
+    // since it is not possible to have a non-zero difference between two bootstrap
+    // means smaller than the step size and thus, since the CI bounds are themselves
+    // bootstrap means, then the smallest non-zero difference in CI width is one
+    // step size.
+    let step_size: f64 = 1.0 / (policy.q * sample_size as f64);
+    let tolerance: f64 = desired_tolerance.max(step_size);
 
     // Compute optimal num_replicates
     let num_replicates: usize = find_optimal_num_replicates(
