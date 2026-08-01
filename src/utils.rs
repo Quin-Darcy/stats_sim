@@ -1,6 +1,5 @@
-use rand::Rng;
 use crate::score::{ScoringPolicy, Valuation};
-
+use rand::Rng;
 
 pub fn gcd(mut a: u64, mut b: u64) -> u64 {
     while b != 0 {
@@ -67,7 +66,7 @@ pub fn get_rand_vec(rng: &mut impl Rng) -> [f64; 3] {
     [
         rng.gen_range(0.0..10.0),
         rng.gen_range(0.0..10.0),
-        rng.gen_range(0.0..10.0)
+        rng.gen_range(0.0..10.0),
     ]
 }
 

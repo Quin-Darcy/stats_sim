@@ -1,15 +1,15 @@
 use rand::Rng;
 
-use crate::score::ScoringPolicy;
 use crate::sample::Sample;
+use crate::score::ScoringPolicy;
 use crate::utils;
 
-// This function takes in a single Sample, the scoring policy, and the number of 
+// This function takes in a single Sample, the scoring policy, and the number of
 // resamples to perform, along with an RNG.
 //
 // The function is simple in that, for each resample iteration, we create an artificial
 // Sample by randomly selecting elements (observations) from the base sample (with replacement,
-// which means those same elements can be selected again). 
+// which means those same elements can be selected again).
 //
 // For effeciency, we don't actually instantiate a full Sample from the selected observations,
 // but rather we compute the discordant difference of each observation on the fly and use that
@@ -21,7 +21,7 @@ use crate::utils;
 //
 // Doing this num_replicates times gives us a vector of these averages, which (to the degree
 // the base sample is representative of the actual population - something influenced by sample
-// size) is an approximation of what we would get if we had performed this process on 
+// size) is an approximation of what we would get if we had performed this process on
 // real fresh samples (the sample distribution) instead of these artificial ones, which itself
 // is an approximation of the population parameter.
 //
@@ -30,10 +30,10 @@ use crate::utils;
 // asked and evaluated throught the two Configs being compared. It represents the "true" comparison
 // of the Configs, no longer contigent on the questions we happened to select.
 pub fn run(
-    num_replicates: usize, 
-    base_sample: &Sample, 
-    policy: &ScoringPolicy, 
-    rng: &mut impl Rng
+    num_replicates: usize,
+    base_sample: &Sample,
+    policy: &ScoringPolicy,
+    rng: &mut impl Rng,
 ) -> Vec<f64> {
     let mut index: usize;
     let mut ca: f64 = 0.0;
@@ -47,7 +47,7 @@ pub fn run(
             diff = utils::discord_diff(
                 policy,
                 &base_sample.observations[index].0,
-                &base_sample.observations[index].1
+                &base_sample.observations[index].1,
             );
             ca = ca + (diff - ca) / ((j + 1) as f64);
         }
@@ -58,7 +58,7 @@ pub fn run(
 
 // This function uses the ci utility to create a confidence interval by running the bootstrap
 // procedure and using the vector of returned re-sample means to then create the interval which
-// contains (100 * confidence_level)% of the mass. 
+// contains (100 * confidence_level)% of the mass.
 //
 // It is important to keep in mind that for any CI, it is a statement about the procedure
 // which generated it. A 95% CI is only saying that if you repeated the procedure which generated
@@ -68,14 +68,9 @@ pub fn ci(
     num_replicates: usize,
     base_sample: &Sample,
     policy: &ScoringPolicy,
-    rng: &mut impl Rng
+    rng: &mut impl Rng,
 ) -> [f64; 2] {
-    let mut bootstrap_means: Vec<f64> = run(
-        num_replicates,
-        base_sample,
-        policy,
-        rng
-    );
+    let mut bootstrap_means: Vec<f64> = run(num_replicates, base_sample, policy, rng);
 
     utils::ci(&mut bootstrap_means, confidence_level)
 }

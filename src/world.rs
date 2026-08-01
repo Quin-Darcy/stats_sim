@@ -1,14 +1,14 @@
 use rand::Rng;
 
-use crate::score::ScoringPolicy;
 use crate::model::{Battery, Config};
 use crate::sample::Sample;
+use crate::score::ScoringPolicy;
 
 // A World is a particular Battery and two Configs
 pub struct World {
     pub battery: Battery,
     pub incumbent: Config,
-    pub candidate: Config
+    pub candidate: Config,
 }
 
 impl World {
@@ -20,7 +20,7 @@ impl World {
         World {
             battery,
             incumbent,
-            candidate
+            candidate,
         }
     }
 
@@ -29,7 +29,7 @@ impl World {
         num_samples: usize,
         sample_size: usize,
         policy: &ScoringPolicy,
-        rng: &mut impl Rng
+        rng: &mut impl Rng,
     ) -> Vec<Sample> {
         let mut samples: Vec<Sample> = Vec::with_capacity(num_samples);
         for _ in 0..num_samples {

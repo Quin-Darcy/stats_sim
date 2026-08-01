@@ -2,17 +2,16 @@ use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
-pub mod score;
+pub mod bootstrap;
 pub mod model;
 pub mod sample;
-pub mod world;
-pub mod bootstrap;
+pub mod score;
 pub mod utils;
+pub mod world;
 
+use crate::sample::Sample;
 use crate::score::ScoringPolicy;
 use crate::world::World;
-use crate::sample::Sample;
-
 
 // This function is only used to verify the implicit claim made by the CIs
 // we return from utils::ci().
@@ -20,17 +19,17 @@ use crate::sample::Sample;
 // We generate some number of fresh samples (not the artifical ones created
 // during bootstrapping) which gives us the sample distribution of the average
 // discordant difference. This approximates the "real" mean discordant difference
-// with respect to the given Battery and Config pair. The average discordant 
+// with respect to the given Battery and Config pair. The average discordant
 // difference of the sample distribution is then treated as our population parameter.
 //
 // We use each of these fresh samples (base_samples) as *the* base sample in one
 // bootstrap "simulation". Recall, given one real sample, we can use bootstrapping
 // to get a CI. The process from one base sample to a CI is one bootstrapping process.
 //
-// We perform the bootstrap process with each sample in base_samples, and for each 
+// We perform the bootstrap process with each sample in base_samples, and for each
 // resultant CI, we can ask "Does the CI contain the population parameter?". If it does,
 // we count it. The total number of CIs which contained the population parameter over
-// the total number of simulations is the "coverage". 
+// the total number of simulations is the "coverage".
 //
 // It *should* approximately match what confidence_level is. That is, a confidence_level CI returned from
 // utils::ci() is a *promise* about the procedure and get_coverage() is the empircal
@@ -41,7 +40,7 @@ fn _get_coverage(
     base_samples: &[Sample],
     policy: &ScoringPolicy,
     parameter: f64,
-    rng: &mut impl Rng
+    rng: &mut impl Rng,
 ) -> f64 {
     let mut ci: [f64; 2];
     let simulations: usize = base_samples.len();
@@ -52,7 +51,7 @@ fn _get_coverage(
             num_replicates,
             &base_samples[i],
             policy,
-            rng
+            rng,
         );
 
         if ci[0] <= parameter && parameter <= ci[1] {
@@ -69,7 +68,7 @@ fn find_optimal_num_replicates(
     safety_threshold: usize,
     base_samples: &[Sample],
     policy: &ScoringPolicy,
-    rng: &mut impl Rng
+    rng: &mut impl Rng,
 ) -> usize {
     // Set a max we are comfortable with
     let max_replicates: usize = 5000;
@@ -79,10 +78,10 @@ fn find_optimal_num_replicates(
     let mut this_ci_width: f64;
     let mut last_ci_width: f64 = 0.0;
     let mut score: usize = 0;
-    
+
     for num_replicates in 2..max_replicates {
         // For each run with a fixed number of replicates
-        // we need to check if it results some number of 
+        // we need to check if it results some number of
         // simulations which exceeds our threshold and that
         // gives CI widths with differences than than the
         // given tolerance
@@ -94,9 +93,9 @@ fn find_optimal_num_replicates(
             ci = bootstrap::ci(
                 confidence_level,
                 num_replicates,
-                &base_samples[0],   // possibly randomize index instead?
+                &base_samples[0], // possibly randomize index instead?
                 policy,
-                rng
+                rng,
             );
 
             // Check how close this CI's width is to the last one
@@ -143,7 +142,7 @@ fn conservative_ci_width(
     num_replicates: usize,
     base_samples: &[Sample],
     policy: &ScoringPolicy,
-    rng: &mut impl Rng
+    rng: &mut impl Rng,
 ) -> f64 {
     let mut ci: [f64; 2];
     let num_simulations: usize = base_samples.len();
@@ -155,7 +154,7 @@ fn conservative_ci_width(
             num_replicates,
             &base_samples[i],
             policy,
-            rng
+            rng,
         );
         cis.push((ci[1] - ci[0]).abs());
     }
@@ -183,12 +182,12 @@ fn main() {
     let sample_size: usize = 132;
     let samples = world.sample(num_samples, sample_size, &policy, &mut rng);
 
-    // CI confidence level on the interval containing the 
-    // the population parameter (e.g., the mean of the 
+    // CI confidence level on the interval containing the
+    // the population parameter (e.g., the mean of the
     // sample discordant difference across all samples
     let confidence_level: f64 = 0.95;
 
-    // Each bootstrap run will produce a vector of means off 
+    // Each bootstrap run will produce a vector of means off
     // each of the replicates generated from the base sample.
     // A CI based off that vector is therefore determined by
     // the values in the vector which itself is determined in
@@ -210,7 +209,7 @@ fn main() {
     // *still* differ.
     //
     // The cause of this stems from the fact we create each
-    // by populating it with randomly selected (with replacement) 
+    // by populating it with randomly selected (with replacement)
     // values from the base sample. The values in the replicate
     // directly impact the statistic we compute and store in the
     // vector that bootstrap::run() returns. Thus, two consecutive
@@ -221,7 +220,7 @@ fn main() {
     //
     // If we only created 1 replicate per bootstrap::run() call,
     // holding everything else fixed, then it should be clear that
-    // the magnitude of the CI width difference between consecutive 
+    // the magnitude of the CI width difference between consecutive
     // runs is at its largest. The more replicates we generate for
     // each bootstrap::run() call, the more smaller the contribution
     // of jitter between runs is coming from the particular values
@@ -233,7 +232,7 @@ fn main() {
     // So the question becomes how much jitter are we willing to
     // tolerate, or what is the biggest step size between the samples
     // in the bootstrapped distribution. That value is the tolerance
-    let desired_tolerance: f64 = 0.001;
+    let desired_tolerance: f64 = 0.01;
 
     // For a given tolerance level, there is a particular number
     // of replicates we must generate per call tobootstrap::run() in
@@ -249,7 +248,7 @@ fn main() {
     // had we run it once more we would have seen a far larger difference
     // that well exceeded our tolerance.
     //
-    // In order to be confident we are not in that situation, we will 
+    // In order to be confident we are not in that situation, we will
     // set some threshold number of times that consecutive CI widths
     // have a difference less than our tolerance. Naturally, the higher
     // the threshold, the more likely it is that the number of replicates
@@ -258,14 +257,14 @@ fn main() {
     // is smaller than our desired tolerance. We want to find the smallest
     // number of replicates which satisfies this threshold since for each
     // additional replicate we generate is an additional impact on performance.
-    let safety_threshold: usize = 20;
+    let safety_threshold: usize = 200;
 
     // For any single observation from a sample, its score is equal to the
     // difference between the two Valuations. This means that the difference
     // must be in the set {1, 1-a, a, 0, -a, a-1, -1}, where a is what the
     // ScoringPolicy's "circumspection" term is. By construction, a = p/q,
     // where p/q are share no common factors. With this, we can see the set
-    // of possible differences has GCD of 1/q. 
+    // of possible differences has GCD of 1/q.
     //
     // The sample statistic we measure for each bootstrap run is the mean of
     // all the discordant differences over an entire sample. That is, we compute
@@ -287,6 +286,8 @@ fn main() {
     let step_size: f64 = 1.0 / (policy.q * sample_size as f64);
     let tolerance: f64 = desired_tolerance.max(step_size);
 
+    /*
+
     // Compute optimal num_replicates
     let num_replicates: usize = find_optimal_num_replicates(
         confidence_level,
@@ -299,7 +300,7 @@ fn main() {
 
     // This value represents a CI width whose trustworthiness comes from having
     // accounted for the two factors of chance which plays into how big it is
-    // (i.e., (1) what base sample we happened to have used and (2) which 
+    // (i.e., (1) what base sample we happened to have used and (2) which
     // observations happened to be selected from the base sample for each replicate
     let con_ci_width: f64 = conservative_ci_width(
         ci_safety_percentile,
@@ -310,14 +311,41 @@ fn main() {
         &mut rng,
     );
 
+    */
+
+    /* TESTING */
+    // here we will iterate through candidate num_replicates and capture te
+    let sims: usize = 1000;
+    let mut tmp_ci: [f64; 2];
+    let mut ci_widths: Vec<f64> = Vec::with_capacity(sims);
+    for _ in 0..sims {
+        tmp_ci = bootstrap::ci(
+            confidence_level,
+            num_replicates,
+            &samples[0],
+            &policy,
+            &mut rng,
+        );
+        ci_widths.push((tmp_ci[1] - tmp_ci[0]).abs());
+    }
+
+    let ci = utils::ci(&mut ci_widths, confidence_level);
+    println!(
+        "Span of {:1}% CI Bands: {:.3}",
+        confidence_level * 100.0,
+        (ci[1] - ci[0]).abs()
+    );
+
+    /*
     println!("Sample Size: {:?}", sample_size);
     println!("CI Confidence Level: {:?}", confidence_level);
     println!("Optimal Bootstrap Replicates: {:?}", num_replicates);
     println!(
-        "Over {} simulations generating {:.1}% CIs,  {:.2}% of the CI widths fell below {:.2}", 
-        num_samples, 
+        "Over {} simulations generating {:.1}% CIs,  {:.2}% of the CI widths fell below {:.2}",
+        num_samples,
         confidence_level * 100.0,
-        ci_safety_percentile,
+        ci_safety_percentile * 100.0,
         con_ci_width
     );
+    */
 }
