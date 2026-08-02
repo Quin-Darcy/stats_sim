@@ -13,6 +13,9 @@ use crate::sample::Sample;
 use crate::score::ScoringPolicy;
 use crate::world::World;
 
+use std::fs::File;
+use std::io::{Write, BufWriter};
+
 // This function is only used to verify the implicit claim made by the CIs
 // we return from utils::ci().
 //
@@ -62,65 +65,78 @@ fn _get_coverage(
     coverage / (simulations as f64)
 }
 
-fn find_optimal_num_replicates(
+// Each bootstrap run will have some jitter in it due to which observations
+// are selected from the base sample to create the replicates. This is true
+// even if we hold the base sample fixed. So if we hold everything else fixed
+// and run a bootstrap and get a CI on the statistic, the width of the CI
+// would vary run-to-run due to this jitter.
+//
+// In the figures folder is a graph which plots the size of the CI width
+// deltas as a function of num_replicates. It actually shows the more
+// conservative 95th percentile delta across 100 simulations for each num_replicate
+// The graph shows that the CI width delta is decreasing as num_replicates increases.
+// Beyond that, it shows 1/sqrt(num_replicates) is always greater than the CI width 
+// delta. The hypothesis then is that there is some constant C for which
+// C/sqrt(num_replicates) approximates the CI width delta for that given num_replicates.
+//
+// The function below sweeps through a range of num_replicates and runs 500 identical
+// bootstraps can captures the deltas between each consecutive CI width and retains the
+// the delta at the 95th percentile. This set represents a sample of (x, y) pairs
+// and under the hypothesis we have that y = C / sqrt(x), where x is num_replicates and
+// y is the CI width delta at the 95th percentile. We store the product
+// y * sqrt(x) since our hypthosesis would suggest that these should be roughly the same
+// value for all x, namely, C. We then take the mean of this set as our approximation of
+// C and use it to then return (C / precision)^2 as the approximation of the particular
+// num_replicates such that the resultant CI width will be less than our precision since
+// if CI width delta ~ C / sqrt(num_replicates) < precision.
+fn calibrate_num_replicates(
+    precision: f64,
     confidence_level: f64,
-    tolerance: f64,
-    safety_threshold: usize,
-    base_samples: &[Sample],
+    sample: &Sample,
     policy: &ScoringPolicy,
     rng: &mut impl Rng,
 ) -> usize {
-    // Set a max we are comfortable with
-    let max_replicates: usize = 5000;
-
-    // List of temporary values we need for the loops
-    let mut ci: [f64; 2];
-    let mut this_ci_width: f64;
+    let loop_step: usize = 100;
+    let max_replicates: usize = 10000;
+    let simulations: usize = 10;
+    let mut tmp_ci: [f64; 2];
     let mut last_ci_width: f64 = 0.0;
-    let mut score: usize = 0;
+    let mut this_ci_width: f64;
+    let mut percentile_delta: f64;
+    let mut per_repl_deltas: Vec<f64> = Vec::with_capacity(simulations);
+    let mut percentile_deltas: Vec<f64> = Vec::with_capacity(max_replicates / loop_step);
 
-    for num_replicates in 2..max_replicates {
-        // For each run with a fixed number of replicates
-        // we need to check if it results some number of
-        // simulations which exceeds our threshold and that
-        // gives CI widths with differences than than the
-        // given tolerance
-        for _ in 0..safety_threshold {
-            // We run the simulation on the first threshold-many
-            // base samples and if the width between each consecutive
-            // CI is less than the tolerance, we break and return
-            // num_replicates
-            ci = bootstrap::ci(
+    for num_replicates in (2..max_replicates).step_by(loop_step) {
+        println!("Testing {}: In Progress", num_replicates);
+        // reset vectors
+        per_repl_deltas.clear();
+
+        for i in 0..simulations {
+            tmp_ci = bootstrap::ci(
                 confidence_level,
                 num_replicates,
-                &base_samples[0], // possibly randomize index instead?
+                sample,
                 policy,
                 rng,
             );
 
-            // Check how close this CI's width is to the last one
-            this_ci_width = (ci[1] - ci[0]).abs();
-            if (this_ci_width - last_ci_width).abs() <= tolerance {
-                score += 1;
+            if i == 0 {
+                last_ci_width = (tmp_ci[1] - tmp_ci[0]).abs();
             } else {
-                score = 0;
+                this_ci_width = (tmp_ci[1] - tmp_ci[0]).abs();
+                per_repl_deltas.push((this_ci_width - last_ci_width).abs());
+                last_ci_width = this_ci_width;
             }
-
-            // We found the optimal num_replicates
-            if score == safety_threshold - 1 {
-                return num_replicates;
-            }
-
-            last_ci_width = this_ci_width;
         }
-        // Reset last_ci_width and score
-        last_ci_width = 0.0;
-        score = 0;
+        percentile_delta = utils::percentile(&mut per_repl_deltas, confidence_level);
+        percentile_deltas.push(percentile_delta * (num_replicates as f64).sqrt());
     }
+    let C: f64 = utils::mean(&percentile_deltas);
 
-    println!("No optimal found. Returning max");
-    return max_replicates;
+    // This is the num_replicates which should yield CI width deltas < precision
+    (C / precision).powf(2.0) as usize
 }
+
 
 // Very similar in structure to get_coverage() above, this function will
 // run a bootstrapping simulation for each Sample in base_samples. However,
@@ -164,7 +180,7 @@ fn conservative_ci_width(
     cis[percentile_index]
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
     // Initialize the RNG
     let seed: u64 = 48;
     let mut rng = StdRng::seed_from_u64(seed);
@@ -179,7 +195,7 @@ fn main() {
 
     // Generate set of samples from this world
     let num_samples: usize = 1000;
-    let sample_size: usize = 132;
+    let sample_size: usize = 100;
     let samples = world.sample(num_samples, sample_size, &policy, &mut rng);
 
     // CI confidence level on the interval containing the
@@ -231,33 +247,8 @@ fn main() {
     //
     // So the question becomes how much jitter are we willing to
     // tolerate, or what is the biggest step size between the samples
-    // in the bootstrapped distribution. That value is the tolerance
-    let desired_tolerance: f64 = 0.01;
-
-    // For a given tolerance level, there is a particular number
-    // of replicates we must generate per call tobootstrap::run() in
-    // order to be confident that we end up with CI widths that are
-    // unlikely to be more narrow than usual due to luck introduced
-    // in the randomness of populating the replicates.
-    //
-    // If we ran two consecutive bootstrap runs with everything fixed
-    // and measured the difference between the resultant CI widths,
-    // it may the case that the difference is smaller than our tolerance.
-    // However, its possible that just by chance the two consecutive runs
-    // produced very similar replicates and thus very close CI widths, but
-    // had we run it once more we would have seen a far larger difference
-    // that well exceeded our tolerance.
-    //
-    // In order to be confident we are not in that situation, we will
-    // set some threshold number of times that consecutive CI widths
-    // have a difference less than our tolerance. Naturally, the higher
-    // the threshold, the more likely it is that the number of replicates
-    // which satisfied that threshold does actually resolve the base
-    // sample's distribution enough that the resulting step size really
-    // is smaller than our desired tolerance. We want to find the smallest
-    // number of replicates which satisfies this threshold since for each
-    // additional replicate we generate is an additional impact on performance.
-    let safety_threshold: usize = 200;
+    // in the bootstrapped distribution. That value is the precision
+    let desired_precision: f64 = 0.01;
 
     // For any single observation from a sample, its score is equal to the
     // difference between the two Valuations. This means that the difference
@@ -278,26 +269,24 @@ fn main() {
     // with step size 1 / (sample_size * q). It then follows that the smallest non-zero
     // difference between any two of these values is equal to that step size.
     //
-    // Therefore, the desired_tolerance can be no smaller than this step size
+    // Therefore, the desired_precision can be no smaller than this step size
     // since it is not possible to have a non-zero difference between two bootstrap
     // means smaller than the step size and thus, since the CI bounds are themselves
     // bootstrap means, then the smallest non-zero difference in CI width is one
     // step size.
     let step_size: f64 = 1.0 / (policy.q * sample_size as f64);
-    let tolerance: f64 = desired_tolerance.max(step_size);
+    let precision: f64 = desired_precision.max(step_size);
 
-    /*
-
-    // Compute optimal num_replicates
-    let num_replicates: usize = find_optimal_num_replicates(
+    // Compute optimal num_replicates - 1345
+    let num_replicates: usize = calibrate_num_replicates(
+        precision,
         confidence_level,
-        tolerance,
-        safety_threshold,
-        &samples,
+        &samples[0],
         &policy,
         &mut rng
     );
 
+    /*
     // This value represents a CI width whose trustworthiness comes from having
     // accounted for the two factors of chance which plays into how big it is
     // (i.e., (1) what base sample we happened to have used and (2) which
@@ -310,15 +299,30 @@ fn main() {
         &policy,
         &mut rng,
     );
-
     */
 
-    /* TESTING */
-    // here we will iterate through candidate num_replicates and capture te
+    // TESTING 
+    // Here I am sweeping through num_replicates, for each one
+    // I will use it to run a bootstrap 1000 times, each time 
+    // returning a CI width and taking the difference between
+    // it and the last one. That is, I will capture the delta
+    // between consecutive CI widths across 1000 simulations.
+    // Once the set of deltas is full, I will store the one at
+    // the 95th percentile. This represents the CI width delta
+    // that was bigger than 95% of the other deltas for that
+    // num_replicates. 
+    //
+    // We would like to find the num_replicates such that even
+    // the 95th percentile delta is smaller than the given
+    // precision.
     let sims: usize = 1000;
+
     let mut tmp_ci: [f64; 2];
-    let mut ci_widths: Vec<f64> = Vec::with_capacity(sims);
-    for _ in 0..sims {
+    let mut last_ci_width: f64 = 0.0;
+    let mut this_ci_width: f64;
+    let mut ci_width_deltas: Vec<f64> = Vec::with_capacity(sims);
+
+    for i in 0..sims {
         tmp_ci = bootstrap::ci(
             confidence_level,
             num_replicates,
@@ -326,17 +330,30 @@ fn main() {
             &policy,
             &mut rng,
         );
-        ci_widths.push((tmp_ci[1] - tmp_ci[0]).abs());
+
+        if i == 0 {
+            last_ci_width = (tmp_ci[1] - tmp_ci[0]).abs();
+        } else {
+            this_ci_width = (tmp_ci[1] - tmp_ci[0]).abs();
+            ci_width_deltas.push((this_ci_width - last_ci_width).abs());
+            last_ci_width = this_ci_width;
+        }
     }
 
-    let ci = utils::ci(&mut ci_widths, confidence_level);
+    let percentile_delta: f64 = utils::percentile(&mut ci_width_deltas, confidence_level);
+
+    println!("Calibrated Num Replicates: {}", num_replicates);
+    println!("Precision: {:.2}", precision);
+    println!("95th Percentile CI Width Delta: {:.2}", percentile_delta);
+    
+
+    /*
     println!(
         "Span of {:1}% CI Bands: {:.3}",
         confidence_level * 100.0,
         (ci[1] - ci[0]).abs()
     );
 
-    /*
     println!("Sample Size: {:?}", sample_size);
     println!("CI Confidence Level: {:?}", confidence_level);
     println!("Optimal Bootstrap Replicates: {:?}", num_replicates);
@@ -348,4 +365,5 @@ fn main() {
         con_ci_width
     );
     */
+    Ok(())
 }

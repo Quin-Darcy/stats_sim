@@ -37,6 +37,12 @@ pub fn ci(vals: &mut [f64], gamma: f64) -> [f64; 2] {
     [vals[li], vals[lu]]
 }
 
+pub fn percentile(vals: &mut [f64], gamma: f64) -> f64 {
+    let percentile_index: usize = (gamma * vals.len() as f64) as usize;
+    vals.sort_by(|a, b| a.total_cmp(b));
+    vals[percentile_index]
+}
+
 pub fn get_rand_pv(rng: &mut impl Rng) -> [f64; 3] {
     // Select 3 random numbers between 0 and 1
     // order them, and their widths form the components
