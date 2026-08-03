@@ -8,10 +8,12 @@ pub mod sample;
 pub mod score;
 pub mod utils;
 pub mod world;
+pub mod new_sample;
 
 use crate::sample::Sample;
 use crate::score::ScoringPolicy;
 use crate::world::World;
+use crate::new_sample::NewSample;
 
 // This function is only used to verify the implicit claim made by the CIs
 // we return from utils::ci().
@@ -266,6 +268,11 @@ fn main() {
     let step_size: f64 = 1.0 / (policy.q * sample_size as f64);
     let precision: f64 = desired_precision.max(step_size);
 
+
+    let ns = NewSample::new(sample_size, &policy, &mut rng);
+
+    /*
+
     // Compute optimal num_replicates
     let num_replicates: usize =
         calibrate_num_replicates(precision, confidence_level, &samples[0], &policy, &mut rng);
@@ -294,4 +301,5 @@ fn main() {
         con_ci_width,
         precision,
     );
+    */
 }
