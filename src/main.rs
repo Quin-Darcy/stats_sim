@@ -13,9 +13,6 @@ use crate::sample::Sample;
 use crate::score::ScoringPolicy;
 use crate::world::World;
 
-use std::fs::File;
-use std::io::{Write, BufWriter};
-
 // This function is only used to verify the implicit claim made by the CIs
 // we return from utils::ci().
 //
@@ -75,7 +72,7 @@ fn _get_coverage(
 // deltas as a function of num_replicates. It actually shows the more
 // conservative 95th percentile delta across 100 simulations for each num_replicate
 // The graph shows that the CI width delta is decreasing as num_replicates increases.
-// Beyond that, it shows 1/sqrt(num_replicates) is always greater than the CI width 
+// Beyond that, it shows 1/sqrt(num_replicates) is always greater than the CI width
 // delta. The hypothesis then is that there is some constant C for which
 // C/sqrt(num_replicates) approximates the CI width delta for that given num_replicates.
 //
@@ -107,18 +104,11 @@ fn calibrate_num_replicates(
     let mut percentile_deltas: Vec<f64> = Vec::with_capacity(max_replicates / loop_step);
 
     for num_replicates in (2..max_replicates).step_by(loop_step) {
-        println!("Testing {}: In Progress", num_replicates);
         // reset vectors
         per_repl_deltas.clear();
 
         for i in 0..simulations {
-            tmp_ci = bootstrap::ci(
-                confidence_level,
-                num_replicates,
-                sample,
-                policy,
-                rng,
-            );
+            tmp_ci = bootstrap::ci(confidence_level, num_replicates, sample, policy, rng);
 
             if i == 0 {
                 last_ci_width = (tmp_ci[1] - tmp_ci[0]).abs();
@@ -131,12 +121,11 @@ fn calibrate_num_replicates(
         percentile_delta = utils::percentile(&mut per_repl_deltas, confidence_level);
         percentile_deltas.push(percentile_delta * (num_replicates as f64).sqrt());
     }
-    let C: f64 = utils::mean(&percentile_deltas);
+    let c: f64 = utils::mean(&percentile_deltas);
 
     // This is the num_replicates which should yield CI width deltas < precision
-    (C / precision).powf(2.0) as usize
+    (c / precision).powf(2.0) as usize
 }
-
 
 // Very similar in structure to get_coverage() above, this function will
 // run a bootstrapping simulation for each Sample in base_samples. However,
@@ -180,7 +169,7 @@ fn conservative_ci_width(
     cis[percentile_index]
 }
 
-fn main() -> std::io::Result<()> {
+fn main() {
     // Initialize the RNG
     let seed: u64 = 48;
     let mut rng = StdRng::seed_from_u64(seed);
@@ -277,16 +266,10 @@ fn main() -> std::io::Result<()> {
     let step_size: f64 = 1.0 / (policy.q * sample_size as f64);
     let precision: f64 = desired_precision.max(step_size);
 
-    // Compute optimal num_replicates - 1345
-    let num_replicates: usize = calibrate_num_replicates(
-        precision,
-        confidence_level,
-        &samples[0],
-        &policy,
-        &mut rng
-    );
+    // Compute optimal num_replicates
+    let num_replicates: usize =
+        calibrate_num_replicates(precision, confidence_level, &samples[0], &policy, &mut rng);
 
-    /*
     // This value represents a CI width whose trustworthiness comes from having
     // accounted for the two factors of chance which plays into how big it is
     // (i.e., (1) what base sample we happened to have used and (2) which
@@ -299,71 +282,16 @@ fn main() -> std::io::Result<()> {
         &policy,
         &mut rng,
     );
-    */
-
-    // TESTING 
-    // Here I am sweeping through num_replicates, for each one
-    // I will use it to run a bootstrap 1000 times, each time 
-    // returning a CI width and taking the difference between
-    // it and the last one. That is, I will capture the delta
-    // between consecutive CI widths across 1000 simulations.
-    // Once the set of deltas is full, I will store the one at
-    // the 95th percentile. This represents the CI width delta
-    // that was bigger than 95% of the other deltas for that
-    // num_replicates. 
-    //
-    // We would like to find the num_replicates such that even
-    // the 95th percentile delta is smaller than the given
-    // precision.
-    let sims: usize = 1000;
-
-    let mut tmp_ci: [f64; 2];
-    let mut last_ci_width: f64 = 0.0;
-    let mut this_ci_width: f64;
-    let mut ci_width_deltas: Vec<f64> = Vec::with_capacity(sims);
-
-    for i in 0..sims {
-        tmp_ci = bootstrap::ci(
-            confidence_level,
-            num_replicates,
-            &samples[0],
-            &policy,
-            &mut rng,
-        );
-
-        if i == 0 {
-            last_ci_width = (tmp_ci[1] - tmp_ci[0]).abs();
-        } else {
-            this_ci_width = (tmp_ci[1] - tmp_ci[0]).abs();
-            ci_width_deltas.push((this_ci_width - last_ci_width).abs());
-            last_ci_width = this_ci_width;
-        }
-    }
-
-    let percentile_delta: f64 = utils::percentile(&mut ci_width_deltas, confidence_level);
-
-    println!("Calibrated Num Replicates: {}", num_replicates);
-    println!("Precision: {:.2}", precision);
-    println!("95th Percentile CI Width Delta: {:.2}", percentile_delta);
-    
-
-    /*
-    println!(
-        "Span of {:1}% CI Bands: {:.3}",
-        confidence_level * 100.0,
-        (ci[1] - ci[0]).abs()
-    );
 
     println!("Sample Size: {:?}", sample_size);
     println!("CI Confidence Level: {:?}", confidence_level);
     println!("Optimal Bootstrap Replicates: {:?}", num_replicates);
     println!(
-        "Over {} simulations generating {:.1}% CIs,  {:.2}% of the CI widths fell below {:.2}",
+        "Over {} simulations generating {:.1}% CIs, {:.2}% of the CI widths fell below {:.4}. Re-running any of these bootstraps with a different RNG seed changes the reported width by less than {:.4} in 95% of cases.",
         num_samples,
         confidence_level * 100.0,
         ci_safety_percentile * 100.0,
-        con_ci_width
+        con_ci_width,
+        precision,
     );
-    */
-    Ok(())
 }
