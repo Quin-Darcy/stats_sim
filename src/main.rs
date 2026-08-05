@@ -2,18 +2,13 @@ use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
-pub mod bootstrap;
-pub mod model;
-pub mod sample;
-pub mod score;
 pub mod utils;
-pub mod world;
 pub mod new_sample;
+pub mod new_bootstrap;
+pub mod new_score;
 
-use crate::sample::Sample;
-use crate::score::ScoringPolicy;
-use crate::world::World;
 use crate::new_sample::NewSample;
+use crate::new_score::NewScoringPolicy;
 
 // This function is only used to verify the implicit claim made by the CIs
 // we return from utils::ci().
@@ -39,8 +34,8 @@ use crate::new_sample::NewSample;
 fn _get_coverage(
     confidence_level: f64,
     num_replicates: usize,
-    base_samples: &[Sample],
-    policy: &ScoringPolicy,
+    base_samples: &[NewSample],
+    policy: &NewScoringPolicy,
     parameter: f64,
     rng: &mut impl Rng,
 ) -> f64 {
@@ -48,7 +43,7 @@ fn _get_coverage(
     let simulations: usize = base_samples.len();
     let mut coverage: f64 = 0.0;
     for i in 0..simulations {
-        ci = bootstrap::ci(
+        ci = new_bootstrap::ci(
             confidence_level,
             num_replicates,
             &base_samples[i],
@@ -91,8 +86,8 @@ fn _get_coverage(
 fn calibrate_num_replicates(
     precision: f64,
     confidence_level: f64,
-    sample: &Sample,
-    policy: &ScoringPolicy,
+    sample: &NewSample,
+    policy: &NewScoringPolicy,
     rng: &mut impl Rng,
 ) -> usize {
     let loop_step: usize = 100;
@@ -110,7 +105,7 @@ fn calibrate_num_replicates(
         per_repl_deltas.clear();
 
         for i in 0..simulations {
-            tmp_ci = bootstrap::ci(confidence_level, num_replicates, sample, policy, rng);
+            tmp_ci = new_bootstrap::ci(confidence_level, num_replicates, sample, policy, rng);
 
             if i == 0 {
                 last_ci_width = (tmp_ci[1] - tmp_ci[0]).abs();
@@ -147,8 +142,8 @@ fn conservative_ci_width(
     ci_safety_percentile: f64,
     confidence_level: f64,
     num_replicates: usize,
-    base_samples: &[Sample],
-    policy: &ScoringPolicy,
+    base_samples: &[NewSample],
+    policy: &NewScoringPolicy,
     rng: &mut impl Rng,
 ) -> f64 {
     let mut ci: [f64; 2];
@@ -156,7 +151,7 @@ fn conservative_ci_width(
     let mut cis: Vec<f64> = Vec::with_capacity(num_simulations);
 
     for i in 0..num_simulations {
-        ci = bootstrap::ci(
+        ci = new_bootstrap::ci(
             confidence_level,
             num_replicates,
             &base_samples[i],
@@ -179,15 +174,13 @@ fn main() {
     // Set the policy we use to scrore. Circumspection will equal p / q
     let p: u64 = 1;
     let q: u64 = 2;
-    let policy = ScoringPolicy::new(p, q).unwrap();
+    let policy = NewScoringPolicy::new(p, q).unwrap();
 
-    // Create a world from which we will sample
-    let world = World::random(&mut rng);
 
     // Generate set of samples from this world
     let num_samples: usize = 1000;
     let sample_size: usize = 100;
-    let samples = world.sample(num_samples, sample_size, &policy, &mut rng);
+    let samples: Vec<NewSample> = new_sample::sample_set(num_samples, sample_size,  &mut rng);
 
     // CI confidence level on the interval containing the
     // the population parameter (e.g., the mean of the
@@ -268,11 +261,6 @@ fn main() {
     let step_size: f64 = 1.0 / (policy.q * sample_size as f64);
     let precision: f64 = desired_precision.max(step_size);
 
-
-    let ns = NewSample::new(sample_size, &policy, &mut rng);
-
-    /*
-
     // Compute optimal num_replicates
     let num_replicates: usize =
         calibrate_num_replicates(precision, confidence_level, &samples[0], &policy, &mut rng);
@@ -301,5 +289,4 @@ fn main() {
         con_ci_width,
         precision,
     );
-    */
 }

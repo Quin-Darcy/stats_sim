@@ -96,7 +96,6 @@
 
 use rand::Rng;
 
-use crate::score::ScoringPolicy;
 use crate::utils;
 
 #[derive(Debug)]
@@ -107,7 +106,7 @@ pub struct NewSample {
 }
 
 impl NewSample {
-    pub fn new(size: usize, policy: &ScoringPolicy, rng: &mut impl Rng) -> NewSample {
+    pub fn new(size: usize, rng: &mut impl Rng) -> NewSample {
         // Processing each question in the battery consists of determining
         // which of the 9 scenarios the answer pair falls in and assigning the
         // corrsponding score. Doing this for all the question means all answer
@@ -183,3 +182,16 @@ impl NewSample {
         NewSample { size, mean, observations }
     }
 }
+
+pub fn sample_set(
+    num_samples: usize, 
+    sample_size: usize, 
+    rng: &mut impl Rng
+) -> Vec<NewSample> {
+    let mut samples: Vec<NewSample> = Vec::with_capacity(num_samples);
+    for _ in 0..num_samples {
+        samples.push(NewSample::new(sample_size, rng));
+    }
+    samples
+}
+
